@@ -49,6 +49,9 @@ let t = 0; // time
 let mass = 1.0;      // m
 let K = 1.0;         // gain
 const tauLag = 0.08; // actuator lag (seconds), small first-order lag
+// Minimum control deadband: below ~2% of full-scale, actuator produces no motion
+// We assume actuator "full-scale" is 1.0 in these units.
+const U_DEADBAND = 0.02;
 
 // Buffers for chart updates
 const maxPoints = 2000;
@@ -65,10 +68,13 @@ function step() {
   const du = ((uCmd - u) / Math.max(tauLag, 1e-6)) * p.dt;
   u += du;
 
+  // Apply deadband so tiny control outputs produce no movement
+  const uEff = Math.abs(u) < U_DEADBAND ? 0 : u;
+
   // Inertial plant (no spring): m * dv/dt + b * v = K * u
   // dv/dt = (K*u - b*v) / m
   const effectiveMass = Math.max(mass, 1e-6);
-  const dv = ((K * u - p.friction * v) / effectiveMass) * p.dt;
+  const dv = ((K * uEff - p.friction * v) / effectiveMass) * p.dt;
   v += dv;
   const dy = v * p.dt;
   y += dy;
@@ -76,7 +82,7 @@ function step() {
 
   tBuf.push(t);
   yBuf.push(y);
-  uBuf.push(u);
+  uBuf.push(uEff);
   spBuf.push(p.setpoint);
   if (tBuf.length > maxPoints) {
     tBuf.shift();
