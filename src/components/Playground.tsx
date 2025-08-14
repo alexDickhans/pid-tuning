@@ -56,7 +56,7 @@ export function Playground(): JSX.Element {
     ki: 0.2,
     setpoint: 1.0,
     friction: 0.5,
-    plant: 'sled',
+    plant: 'flywheel',
     drag: 0.2,
     inertiaJ: 0.05,
     loadTorque: 0
@@ -426,6 +426,7 @@ export function Playground(): JSX.Element {
   }
 
   return (
+    <>
     <div className="card">
       <h2 className="section-title">P Controller</h2>
       <div className="controls">
@@ -437,16 +438,18 @@ export function Playground(): JSX.Element {
         </p>
       </div>
       <div className="interactive">
-      <div className="row" style={{ gap: 12, marginBottom: 12 }}>
-        <label htmlFor="plant" style={{ margin: 0 }}>Plant</label>
-        <select
-          id="plant"
-          value={params.plant ?? 'sled'}
-          onChange={(e) => setParams(p => ({ ...p, plant: e.target.value as 'sled' | 'flywheel' }))}
-        >
-          <option value="sled">Sled (position)</option>
-          <option value="flywheel">Flywheel (speed)</option>
-        </select>
+      <div className="row" style={{ gap: 12, marginBottom: 12, alignItems: 'center' }}>
+        <span>Plant</span>
+        <div className="segmented">
+          <button
+            className={(params.plant ?? 'sled') === 'sled' ? 'is-active' : ''}
+            onClick={() => setParams(p => ({ ...p, plant: 'sled' }))}
+          >Sled</button>
+          <button
+            className={(params.plant ?? 'sled') === 'flywheel' ? 'is-active' : ''}
+            onClick={() => setParams(p => ({ ...p, plant: 'flywheel' }))}
+          >Flywheel</button>
+        </div>
       </div>
       <div className="position-bar-outer">
         <div
@@ -539,7 +542,8 @@ export function Playground(): JSX.Element {
           essential to remove the speed drop caused by friction and load.
         </p>
       </div>
-      <div className="card" style={{ marginTop: 24 }}>
+    </div>
+    <div className="card" style={{ marginTop: -10 }}>
         <h2 className="section-title">PI Controller</h2>
         <div className="controls">
           <p>
@@ -549,16 +553,18 @@ export function Playground(): JSX.Element {
           </p>
         </div>
         <div className="interactive">
-          <div className="row" style={{ gap: 12, marginBottom: 12 }}>
-            <label htmlFor="plantPI" style={{ margin: 0 }}>Plant</label>
-            <select
-              id="plantPI"
-              value={paramsPI.plant ?? 'sled'}
-              onChange={(e) => setParamsPI(p => ({ ...p, plant: e.target.value as 'sled' | 'flywheel' }))}
-            >
-              <option value="sled">Sled (position)</option>
-              <option value="flywheel">Flywheel (speed)</option>
-            </select>
+          <div className="row" style={{ gap: 12, marginBottom: 12, alignItems: 'center' }}>
+            <span>Plant</span>
+            <div className="segmented">
+              <button
+                className={(paramsPI.plant ?? 'sled') === 'sled' ? 'is-active' : ''}
+                onClick={() => setParamsPI(p => ({ ...p, plant: 'sled' }))}
+              >Sled</button>
+              <button
+                className={(paramsPI.plant ?? 'sled') === 'flywheel' ? 'is-active' : ''}
+                onClick={() => setParamsPI(p => ({ ...p, plant: 'flywheel' }))}
+              >Flywheel</button>
+            </div>
           </div>
           <div className="position-bar-outer">
             <div
@@ -646,7 +652,7 @@ export function Playground(): JSX.Element {
           )}
         </div>
       </div>
-    </div>
+    </>
   );
 }
 

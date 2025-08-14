@@ -277,4 +277,31 @@ details[open] > summary {
   border-bottom-right-radius: 12px;
 }
 
+/* Segmented control */
+.segmented {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.segmented button {
+  background: transparent;
+  color: var(--text);
+  padding: 8px 12px;
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.segmented button:hover {
+  background: #f3f4f6;
+}
+
+.segmented .is-active {
+  background: var(--primary);
+  color: #fff;
+}
+
 
