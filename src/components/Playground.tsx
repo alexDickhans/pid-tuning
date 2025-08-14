@@ -219,7 +219,13 @@ export function Playground(): JSX.Element {
 
   return (
     <div className="card">
-      <h2 className="section-title">P Controller with Inertial Plant</h2>
+      <h2 className="section-title">P Controller (Inertial Plant)</h2>
+      <div className="controls">
+        <p>
+          This simulator lets you explore how a proportional (P) controller works with a simple system that has mass and friction—imagine pushing a sled on a rough surface. In a proportional controller, the control action (how hard you push) is directly proportional (Kp * error) to the error, which is the difference between the current position and the target value (the setpoint). That means if the system is far from the setpoint, the controller pushes harder; if it's close, it pushes more gently. The <b>Kp</b> value is the proportional gain: it determines how strongly the system reacts to being off target. A higher Kp makes the system respond faster, but if it's too high, the system might overshoot the target or start to oscillate back and forth. You can pause the simulation, change the settings, and then resume to see how the system behaves. Try moving the setpoint and adjusting Kp to see what happens!
+        </p>
+      </div>
+      <div className="interactive">
       <div className="position-bar-outer">
         <div
           ref={barRef}
@@ -255,11 +261,11 @@ export function Playground(): JSX.Element {
         </div>
       </div>
 
-      <div className="row" style={{ justifyContent: 'flex-start', gap: 12, margin: '12px 0' }}>
+      <div className="row toolbar" style={{ justifyContent: 'flex-start', gap: 12, margin: '12px 0' }}>
         <details onToggle={(e) => setGraphsOpen((e.target as HTMLDetailsElement).open)}>
           <summary style={{ cursor: 'pointer' }}>Graphs</summary>
         </details>
-        <div className="row" style={{ gap: 8 }}>
+        <div className="row button-row" style={{ gap: 8 }}>
           <button onClick={() => setIsRunning(r => !r)}>{isRunning ? 'Pause' : 'Play'}</button>
           <button onClick={() => setResetCounter(c => c + 1)}>Reset/Start</button>
           <button onClick={() => { setParams(p => ({ ...p, friction: +(Math.random() * 3.0).toFixed(2) })); worker.postMessage({ type: 'randomize' }); }}>Randomize System</button>
@@ -272,25 +278,11 @@ export function Playground(): JSX.Element {
           <div className="chart" ref={uPlotRef} />
         </>
       )}
+      </div>
 
       <div className="controls">
         <p>
-          This example shows a proportional controller driving a simple inertial plant
-          with viscous friction. Increasing Kp speeds up the response but can
-          cause overshoot and oscillation. Try pausing, changing parameters, and resuming.
-        </p>
-        <div className="stack">
-
-          <div>
-            {/* Friction is randomized in code; slider removed per request */}
-          </div>
-
-          {/* dt fixed in code at 0.01; hidden from UI */}
-        </div>
-        <p>
-          With only proportional action, steady-state error can remain for constant
-          disturbances or friction. In later examples, integral action will remove
-          this offset, and derivative action will improve damping.
+          When you use only proportional control, the system might not reach the exact setpoint if there are constant disturbances or friction slowing things down. This means the position can get close, but it might always be a little off—this is called steady-state error. Also, if you try to make the system respond faster by increasing the gain, it can start to overshoot or oscillate. There are other ways to help the system reach the setpoint more accurately and settle down more smoothly, which you'll see in later examples.
         </p>
       </div>
     </div>

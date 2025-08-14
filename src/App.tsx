@@ -6,7 +6,7 @@ export default function App(): JSX.Element {
     <div>
       <header className="header">
         <div className="container">
-          <h1 style={{ margin: 0 }}>PID Simulator</h1>
+          <h1 style={{ margin: 0 }}>Alex Dickhans' PID Simulator</h1>
         </div>
       </header>
       <main className="container">
