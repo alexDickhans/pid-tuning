@@ -19,6 +19,7 @@ type SimDataMessage = {
 
 export function Playground(): JSX.Element {
   const DEFAULT_DT = 0.01;
+  const GRAPH_WINDOW_SEC = 10; // visible time window for scrolling plots
   const [params, setParams] = useState<SimParams>({
     dt: DEFAULT_DT,
     kp: 1.0,
@@ -31,12 +32,10 @@ export function Playground(): JSX.Element {
 
   const yPlotRef = useRef<HTMLDivElement | null>(null);
   const uPlotRef = useRef<HTMLDivElement | null>(null);
-  const graphsContainerRef = useRef<HTMLElement | null>(null);
   const yPlot = useRef<uPlot | null>(null);
   const uPlotInstance = useRef<uPlot | null>(null);
   const dataBuffer = useRef<SimDataMessage | null>(null);
   const [latestY, setLatestY] = useState(0);
-  const [graphsInView, setGraphsInView] = useState(false);
 
   const worker = useMemo(() => new Worker(new URL('../sim/sim.worker.ts', import.meta.url), { type: 'module' }), [resetCounter]);
 
@@ -71,9 +70,8 @@ export function Playground(): JSX.Element {
   useEffect(() => {
     if (!graphsOpen) return;
     if (!yPlotRef.current || !uPlotRef.current) return;
-    const now = Date.now() / 1000;
     const initData = [
-      [now], // t
+      [0], // t
       [0], // sp
       [0], // y
     ];
@@ -104,7 +102,7 @@ export function Playground(): JSX.Element {
           { label: 'u', stroke: 'green' }
         ]
       },
-      [[now], [0]],
+      [[0], [0]],
       uPlotRef.current
     );
 
@@ -116,6 +114,11 @@ export function Playground(): JSX.Element {
       const { t, y, u, sp } = buf;
       yPlot.current.setData([t, sp, y] as AlignedData);
       uPlotInstance.current.setData([t, u] as AlignedData);
+      const tLast = t.length ? t[t.length - 1] : 0;
+      const xmin = Math.max(0, tLast - GRAPH_WINDOW_SEC);
+      const xmax = tLast;
+      yPlot.current.setScale('x', { min: xmin, max: xmax });
+      uPlotInstance.current.setScale('x', { min: xmin, max: xmax });
     }
 
     return () => {
@@ -126,20 +129,7 @@ export function Playground(): JSX.Element {
     };
   }, [resetCounter, graphsOpen]);
 
-  // Track if the graphs container is in viewport
-  useEffect(() => {
-    const el = graphsContainerRef.current;
-    if (!el) return;
-    const io = new IntersectionObserver((entries) => {
-      for (const entry of entries) {
-        if (entry.target === el) {
-          setGraphsInView(entry.isIntersecting);
-        }
-      }
-    }, { threshold: 0.1 });
-    io.observe(el);
-    return () => io.disconnect();
-  }, [graphsContainerRef.current]);
+  // We keep simulation always running and update charts when open
 
   // Animation loop to push buffered data to charts ~60fps
   useEffect(() => {
@@ -151,13 +141,18 @@ export function Playground(): JSX.Element {
         // Always update latestY for the position bar, regardless of graphs mount/state
         const lastY = y.length ? y[y.length - 1] : 0;
         setLatestY(lastY);
-        // Only push data to charts if they exist and are in view
-        if (graphsOpen && graphsInView && yPlot.current && uPlotInstance.current) {
+        // Only push data to charts if they exist and graphs are open
+        if (graphsOpen && yPlot.current && uPlotInstance.current) {
           const tArr = t;
           const yData = [tArr, sp, y] as AlignedData;
           yPlot.current.setData(yData);
           const uData = [tArr, u] as AlignedData;
           uPlotInstance.current.setData(uData);
+          const tLast = tArr.length ? tArr[tArr.length - 1] : 0;
+          const xmin = Math.max(0, tLast - GRAPH_WINDOW_SEC);
+          const xmax = tLast;
+          yPlot.current.setScale('x', { min: xmin, max: xmax });
+          uPlotInstance.current.setScale('x', { min: xmin, max: xmax });
         }
       }
       raf = requestAnimationFrame(frame);
@@ -248,7 +243,7 @@ export function Playground(): JSX.Element {
           this offset, and derivative action will improve damping.
         </p>
       </div>
-      <div ref={el => { graphsContainerRef.current = el as unknown as HTMLElement; }}>
+      <div>
         <details onToggle={(e) => setGraphsOpen((e.target as HTMLDetailsElement).open)}>
           <summary style={{ cursor: 'pointer' }}>Graphs</summary>
           <div className="chart" ref={yPlotRef} />

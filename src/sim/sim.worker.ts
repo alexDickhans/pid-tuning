@@ -106,7 +106,7 @@ function startLoop() {
 
   flushTimer = setInterval(() => {
     flush();
-  }, 50) as unknown as number; // ~20fps to main thread
+  }, 16) as unknown as number; // ~60fps to main thread
 }
 
 function stopLoop() {
