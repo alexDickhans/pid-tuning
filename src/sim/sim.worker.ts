@@ -18,6 +18,7 @@ type SimParams = {
   dt: number;
   kp: number;
   ki?: number;
+  kd?: number;
   setpoint: number;
   // Inertial plant exposed param(s)
   friction: number;    // b (viscous)
@@ -40,6 +41,7 @@ let p: SimParams = {
   dt: 0.01,
   kp: 1,
   ki: 0,
+  kd: 0,
   setpoint: 1,
   friction: 0.5,
   plant: 'sled',
@@ -59,6 +61,8 @@ let t = 0; // time
 let omega = 0;
 // Integral of error for PI control
 let ei = 0;
+// Previous error for derivative term
+let ePrev = 0;
 
 // Hidden plant parameters
 let mass = 1.0;      // m
@@ -81,8 +85,13 @@ function step() {
   // PI control with improved anti-windup
   const ki = p.ki ?? 0;
   const kp = p.kp;
+  const kd = p.kd ?? 0;
   // Predict saturation using the command side and error direction
-  const uCmdNoI = kp * e;
+  const de = (e - ePrev) / Math.max(p.dt, 1e-6);
+  // Optional derivative clamp to avoid extreme spikes from large setpoint steps
+  const DE_CLAMP = 1e3;
+  const deClamped = Math.max(-DE_CLAMP, Math.min(DE_CLAMP, de));
+  const uCmdNoI = kp * e + kd * deClamped;
   const uCmdTentative = uCmdNoI + ki * ei;
   const uCmdSat = Math.max(-1, Math.min(1, uCmdTentative));
   const saturatingHigh = uCmdTentative > 1 && e > 0;
@@ -95,7 +104,7 @@ function step() {
     if (ei < -EI_MAX) ei = -EI_MAX;
   }
   // Recompute command after possible ei update and clamp command for actuator
-  uCmd = Math.max(-1, Math.min(1, kp * e + ki * ei));
+  uCmd = Math.max(-1, Math.min(1, kp * e + ki * ei + kd * deClamped));
   // First-order actuator lag: du/dt = (uCmd - u)/tauLag
   const du = ((uCmd - u) / Math.max(tauLag, 1e-6)) * p.dt;
   u += du;
@@ -122,6 +131,7 @@ function step() {
     y += dy;
   }
   t += p.dt;
+  ePrev = e;
 
   tBuf.push(t);
   yBuf.push(y);
@@ -182,6 +192,7 @@ function resetState() {
   t = 0;
   omega = 0;
   ei = 0;
+  ePrev = 0;
   tBuf.length = 0;
   yBuf.length = 0;
   uBuf.length = 0;

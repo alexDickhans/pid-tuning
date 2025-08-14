@@ -6,6 +6,7 @@ type SimParams = {
   dt: number;
   kp: number;
   ki?: number;
+  kd?: number;
   setpoint: number;
   friction: number;
   plant?: 'sled' | 'flywheel';
@@ -72,6 +73,29 @@ export function Playground(): JSX.Element {
   const dataBufferPI = useRef<SimDataMessage | null>(null);
   const [latestYPI, setLatestYPI] = useState(0);
   const workerPI = useMemo(() => new Worker(new URL('../sim/sim.worker.ts', import.meta.url), { type: 'module' }), [resetCounterPI]);
+  // Third simulation: PD controller
+  const [paramsPD, setParamsPD] = useState<SimParams>({
+    dt: DEFAULT_DT,
+    kp: 1.0,
+    kd: 0.2,
+    setpoint: 1.0,
+    friction: 0.5,
+    plant: 'sled',
+    drag: 0.2,
+    inertiaJ: 0.05,
+    loadTorque: 0
+  });
+  const [isRunningPD, setIsRunningPD] = useState(true);
+  const [resetCounterPD, setResetCounterPD] = useState(0);
+  const [graphsOpenPD, setGraphsOpenPD] = useState(false);
+  const graphsOpenRefPD = useRef(false);
+  const yPlotRefPD = useRef<HTMLDivElement | null>(null);
+  const uPlotRefPD = useRef<HTMLDivElement | null>(null);
+  const yPlotPD = useRef<uPlot | null>(null);
+  const uPlotInstancePD = useRef<uPlot | null>(null);
+  const dataBufferPD = useRef<SimDataMessage | null>(null);
+  const [latestYPD, setLatestYPD] = useState(0);
+  const workerPD = useMemo(() => new Worker(new URL('../sim/sim.worker.ts', import.meta.url), { type: 'module' }), [resetCounterPD]);
 
   useEffect(() => {
     function onMessage(ev: MessageEvent) {
@@ -102,6 +126,21 @@ export function Playground(): JSX.Element {
       workerPI.terminate();
     };
   }, [workerPI]);
+  // Hook up PD worker
+  useEffect(() => {
+    function onMessage(ev: MessageEvent) {
+      const msg = ev.data as SimDataMessage | { type: 'ready' };
+      if ((msg as any).type === 'data') {
+        dataBufferPD.current = msg as SimDataMessage;
+      }
+    }
+    workerPD.addEventListener('message', onMessage);
+    workerPD.postMessage({ type: 'start', params: paramsPD, running: isRunningPD });
+    return () => {
+      workerPD.removeEventListener('message', onMessage);
+      workerPD.terminate();
+    };
+  }, [workerPD]);
 
   useEffect(() => {
     worker.postMessage({ type: 'update', params, running: isRunning });
@@ -109,6 +148,9 @@ export function Playground(): JSX.Element {
   useEffect(() => {
     workerPI.postMessage({ type: 'update', params: paramsPI, running: isRunningPI });
   }, [workerPI, paramsPI, isRunningPI]);
+  useEffect(() => {
+    workerPD.postMessage({ type: 'update', params: paramsPD, running: isRunningPD });
+  }, [workerPD, paramsPD, isRunningPD]);
 
   // On first mount, randomize the hidden system and friction, and ensure running
   useEffect(() => {
@@ -122,6 +164,20 @@ export function Playground(): JSX.Element {
       loadTorque: +(Math.random() * 1.0).toFixed(2)
     }));
     worker.postMessage({ type: 'randomize' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  // On first mount of PD sim
+  useEffect(() => {
+    setIsRunningPD(true);
+    setParamsPD(p => ({
+      ...p,
+      dt: DEFAULT_DT,
+      friction: +(Math.random() * 3.0).toFixed(2),
+      drag: +(Math.random() * 2.0).toFixed(2),
+      inertiaJ: +(0.001 + Math.random() * (0.2 - 0.001)).toFixed(3),
+      loadTorque: +(Math.random() * 1.0).toFixed(2)
+    }));
+    workerPD.postMessage({ type: 'randomize' });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   // On first mount of PI sim
@@ -146,6 +202,9 @@ export function Playground(): JSX.Element {
   useEffect(() => {
     graphsOpenRefPI.current = graphsOpenPI;
   }, [graphsOpenPI]);
+  useEffect(() => {
+    graphsOpenRefPD.current = graphsOpenPD;
+  }, [graphsOpenPD]);
 
   // uPlot initialization
   useEffect(() => {
@@ -324,6 +383,94 @@ export function Playground(): JSX.Element {
       uPlotInstancePI.current = null;
     };
   }, [resetCounterPI, graphsOpenPI, paramsPI.plant]);
+  // uPlot initialization for PD sim
+  useEffect(() => {
+    if (!graphsOpenPD) return;
+    if (!yPlotRefPD.current || !uPlotRefPD.current) return;
+    const initData: AlignedData = [
+      [0],
+      [0],
+      [0],
+    ];
+    const yWidth = yPlotRefPD.current.clientWidth || 800;
+    const yTitle = (paramsPD.plant ?? 'sled') === 'flywheel'
+      ? 'Setpoint (black) and Speed ω (blue)'
+      : 'Setpoint (black) and Position y (blue)';
+    const yChart = new uPlot(
+      {
+        width: yWidth,
+        height: 320,
+        title: yTitle,
+        scales: { x: { time: false } },
+        series: [
+          {},
+          { label: 'Setpoint', stroke: 'black' },
+          { label: 'PV', stroke: 'blue' }
+        ]
+      },
+      initData,
+      yPlotRefPD.current
+    );
+
+    const uWidth = uPlotRefPD.current.clientWidth || yWidth;
+    const uChart = new uPlot(
+      {
+        width: uWidth,
+        height: 200,
+        title: 'Control Output u(t)',
+        scales: { x: { time: false } },
+        series: [
+          {},
+          { label: 'u', stroke: 'green' }
+        ]
+      },
+      ([[0], [0]] as unknown) as AlignedData,
+      uPlotRefPD.current
+    );
+
+    yPlotPD.current = yChart;
+    uPlotInstancePD.current = uChart;
+    const buf = dataBufferPD.current;
+    if (buf) {
+      const { t, y, u, sp } = buf;
+      const tLast = t.length ? t[t.length - 1] : 0;
+      const start = tLast - GRAPH_WINDOW_SEC;
+      const i0 = findStartIndex(t, start);
+      const tSlice = t.slice(i0);
+      const spSlice = sp.slice(i0);
+      const ySlice = y.slice(i0);
+      const uSlice = u.slice(i0);
+      yPlotPD.current.setData([tSlice, spSlice, ySlice] as AlignedData);
+      uPlotInstancePD.current.setData([tSlice, uSlice] as AlignedData);
+      if (tSlice.length >= 2) {
+        const xmin = tSlice[0];
+        const xmax = Math.max(tSlice[tSlice.length - 1], xmin + EPS);
+        yPlotPD.current.setScale('x', { min: xmin, max: xmax });
+        uPlotInstancePD.current.setScale('x', { min: xmin, max: xmax });
+      }
+    }
+
+    const resizeObserver = new ResizeObserver(() => {
+      if (yPlotRefPD.current && yPlotPD.current) {
+        const w = yPlotRefPD.current.clientWidth || 800;
+        yPlotPD.current.setSize({ width: w, height: 320 });
+      }
+      if (uPlotRefPD.current && uPlotInstancePD.current) {
+        const w = uPlotRefPD.current.clientWidth || 800;
+        uPlotInstancePD.current.setSize({ width: w, height: 200 });
+      }
+    });
+    resizeObserver.observe(yPlotRefPD.current);
+    resizeObserver.observe(uPlotRefPD.current);
+
+    return () => {
+      resizeObserver.disconnect();
+      yChart.destroy();
+      uChart.destroy();
+      yPlotPD.current = null;
+      uPlotInstancePD.current = null;
+    };
+  }, [resetCounterPD, graphsOpenPD, paramsPD.plant]);
 
   // We keep simulation always running and update charts when open
   useEffect(() => {
@@ -358,6 +505,39 @@ export function Playground(): JSX.Element {
             const xmax = Math.max(tSlice[tSlice.length - 1], xmin + EPS);
             yPlot.current.setScale('x', { min: xmin, max: xmax });
             uPlotInstance.current.setScale('x', { min: xmin, max: xmax });
+          }
+        }
+      }
+      raf = requestAnimationFrame(frame);
+    };
+    raf = requestAnimationFrame(frame);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  // Animation loop for PD charts
+  useEffect(() => {
+    let raf = 0;
+    const frame = () => {
+      const buf = dataBufferPD.current;
+      if (buf) {
+        const { t, y, u, sp } = buf;
+        const lastY = y.length ? y[y.length - 1] : 0;
+        setLatestYPD(lastY);
+        if (graphsOpenRefPD.current && yPlotPD.current && uPlotInstancePD.current) {
+          const tArr = t;
+          const tLast = tArr.length ? tArr[tArr.length - 1] : 0;
+          const start = tLast - GRAPH_WINDOW_SEC;
+          const i0 = findStartIndex(tArr, start);
+          const tSlice = tArr.slice(i0);
+          const spSlice = sp.slice(i0);
+          const ySlice = y.slice(i0);
+          const uSlice = u.slice(i0);
+          yPlotPD.current.setData([tSlice, spSlice, ySlice] as AlignedData);
+          uPlotInstancePD.current.setData([tSlice, uSlice] as AlignedData);
+          if (tSlice.length >= 2) {
+            const xmin = tSlice[0];
+            const xmax = Math.max(tSlice[tSlice.length - 1], xmin + EPS);
+            yPlotPD.current.setScale('x', { min: xmin, max: xmax });
+            uPlotInstancePD.current.setScale('x', { min: xmin, max: xmax });
           }
         }
       }
@@ -423,6 +603,16 @@ export function Playground(): JSX.Element {
     const x = Math.min(Math.max(clientX - rect.left, 0), rect.width);
     const sp = rangeMin + (x / rect.width) * rangeWidth;
     setParamsPI(p => ({ ...p, setpoint: sp }));
+  }
+  // PD setpoint bar
+  const barRefPD = useRef<HTMLDivElement | null>(null);
+  function setpointFromClickPD(clientX: number) {
+    const el = barRefPD.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const x = Math.min(Math.max(clientX - rect.left, 0), rect.width);
+    const sp = rangeMin + (x / rect.width) * rangeWidth;
+    setParamsPD(p => ({ ...p, setpoint: sp }));
   }
 
   return (
@@ -542,6 +732,7 @@ export function Playground(): JSX.Element {
           essential to remove the speed drop caused by friction and load.
         </p>
       </div>
+      
     </div>
     <div className="card" style={{ marginTop: -10 }}>
         <h2 className="section-title">PI Controller</h2>
@@ -648,6 +839,143 @@ export function Playground(): JSX.Element {
             <>
               <div className="chart" ref={yPlotRefPI} />
               <div className="chart" ref={uPlotRefPI} />
+            </>
+          )}
+        </div>
+      </div>
+      <div className="card" style={{ marginTop: 24 }}>
+        <h2 className="section-title">Derivative (D) Control</h2>
+        <div className="controls">
+          <p>
+            This simulator adds Derivative (D) control to Proportional (P). P is the push toward the
+            target now, and D is a gentle brake when the value is changing quickly. Together, PD can
+            reach the goal with less overshoot and wobble.
+          </p>
+          <p>
+            Middle-school explanation: P asks “how far are we from the goal?” and pushes that much.
+            D asks “how fast are we moving?” and slows us down if we’re rushing. Use Kp to set how
+            strong the push is, and Kd to set how strong the braking is.
+          </p>
+          <p>
+            Tuning tip: increase Kp until the system responds well but starts to overshoot, then add a
+            small Kd to calm the overshoot. Too much Kd can make it feel slow and can react to noise.
+          </p>
+        </div>
+        <div className="controls">
+          <h2 className="section-title">PD Controller</h2>
+          <p>
+            Derivative control looks at how fast the value is changing right now. Think of it as a
+            “speedometer for the error.” If the system is racing toward the target too quickly,
+            D adds a gentle brake to slow it down before it overshoots.
+          </p>
+          <p>
+            This helps reduce wobble and overshoot, making the motion feel smoother and more
+            controlled. It does not move you toward the target by itself (that’s P and I). Instead,
+            it helps prevent going past the target and bouncing back.
+          </p>
+          <p>
+            Tuning tip: use a small amount of D to improve stability and damping. Too much D can make
+            the system feel sluggish and can amplify measurement noise (tiny jitters). P handles “how
+            far off?”, I handles “how long have we been off?”, and D handles “how fast are we changing?”
+            Together, PID can be fast, accurate, and smooth.
+          </p>
+        </div>
+        <div className="interactive">
+          <div className="row" style={{ gap: 12, marginBottom: 12, alignItems: 'center' }}>
+            <span>Plant</span>
+            <div className="segmented">
+              <button
+                className={(paramsPD.plant ?? 'sled') === 'sled' ? 'is-active' : ''}
+                onClick={() => setParamsPD(p => ({ ...p, plant: 'sled' }))}
+              >Sled</button>
+              <button
+                className={(paramsPD.plant ?? 'sled') === 'flywheel' ? 'is-active' : ''}
+                onClick={() => setParamsPD(p => ({ ...p, plant: 'flywheel' }))}
+              >Flywheel</button>
+            </div>
+          </div>
+          <div className="position-bar-outer">
+            <div
+              ref={barRefPD}
+              className="position-bar"
+              onMouseDown={(e) => setpointFromClickPD(e.clientX)}
+              onClick={(e) => setpointFromClickPD(e.clientX)}
+            >
+              <BarMarkers y={latestYPD} sp={paramsPD.setpoint} min={rangeMin} max={rangeMax} />
+            </div>
+
+            <div className="row" style={{ justifyContent: 'flex-start', marginTop: 8, gap: 16 }}>
+              <span>Click anywhere on the bar to set the setpoint</span>
+              <span>
+                Setpoint: {paramsPD.setpoint.toFixed(2)} |
+                {(paramsPD.plant ?? 'sled') === 'flywheel' ? ' Speed' : ' Position'}:
+                {' '}{latestYPD.toFixed(2)}
+              </span>
+            </div>
+            <div className="row" style={{ width: '100%' }}>
+              <label htmlFor="kpPD" style={{ margin: 0, minWidth: 28, textAlign: 'right' }}>Kp</label>
+              <input
+                id="kpPD"
+                type="range"
+                min="0"
+                max="10"
+                step="0.01"
+                value={paramsPD.kp}
+                onChange={(e) => setParamsPD(p => ({ ...p, kp: Number(e.target.value) }))}
+                style={{ flex: 1 }}
+              />
+              <input
+                type="number"
+                value={paramsPD.kp}
+                step={0.01}
+                onChange={(e) => setParamsPD(p => ({ ...p, kp: Number(e.target.value) }))}
+              />
+            </div>
+            <div className="row" style={{ width: '100%' }}>
+              <label htmlFor="kdPD" style={{ margin: 0, minWidth: 28, textAlign: 'right' }}>Kd</label>
+              <input
+                id="kdPD"
+                type="range"
+                min="0"
+                max="5"
+                step="0.001"
+                value={paramsPD.kd ?? 0}
+                onChange={(e) => setParamsPD(p => ({ ...p, kd: Number(e.target.value) }))}
+                style={{ flex: 1 }}
+              />
+              <input
+                type="number"
+                value={paramsPD.kd ?? 0}
+                step={0.001}
+                onChange={(e) => setParamsPD(p => ({ ...p, kd: Number(e.target.value) }))}
+              />
+            </div>
+          </div>
+
+          <div className="row toolbar" style={{ justifyContent: 'flex-start', gap: 12, margin: '12px 0' }}>
+            <details onToggle={(e) => setGraphsOpenPD((e.target as HTMLDetailsElement).open)}>
+              <summary style={{ cursor: 'pointer' }}>Graphs</summary>
+            </details>
+            <div className="row button-row" style={{ gap: 8 }}>
+              <button onClick={() => setIsRunningPD(r => !r)}>{isRunningPD ? 'Pause' : 'Play'}</button>
+              <button onClick={() => setResetCounterPD(c => c + 1)}>Reset/Start</button>
+              <button onClick={() => {
+                setParamsPD(p => ({
+                  ...p,
+                  friction: +(Math.random() * 3.0).toFixed(2),
+                  drag: +(Math.random() * 2.0).toFixed(2),
+                  inertiaJ: +(0.001 + Math.random() * (0.2 - 0.001)).toFixed(3),
+                  loadTorque: +(Math.random() * 1.0).toFixed(2)
+                }));
+                workerPD.postMessage({ type: 'randomize' });
+              }}>Randomize System</button>
+            </div>
+          </div>
+
+          {graphsOpenPD && (
+            <>
+              <div className="chart" ref={yPlotRefPD} />
+              <div className="chart" ref={uPlotRefPD} />
             </>
           )}
         </div>
