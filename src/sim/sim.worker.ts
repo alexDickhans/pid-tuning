@@ -17,9 +17,15 @@ type ResetMessage = { type: 'reset' };
 type SimParams = {
   dt: number;
   kp: number;
+  ki?: number;
   setpoint: number;
   // Inertial plant exposed param(s)
   friction: number;    // b (viscous)
+  // Plant selection and flywheel params
+  plant?: 'sled' | 'flywheel';
+  drag?: number;         // flywheel viscous drag
+  inertiaJ?: number;     // flywheel inertia
+  loadTorque?: number;   // constant opposing torque
 };
 
 type DataMessage = {
@@ -33,17 +39,26 @@ type DataMessage = {
 let p: SimParams = {
   dt: 0.01,
   kp: 1,
+  ki: 0,
   setpoint: 1,
-  friction: 0.5
+  friction: 0.5,
+  plant: 'sled',
+  drag: 0.2,
+  inertiaJ: 0.05,
+  loadTorque: 0
 };
 let running = true;
 
 // Plant state and controller state
 let y = 0; // position/output
 let v = 0; // velocity
-let u = 0; // actuator output after lag
-let uCmd = 0; // instantaneous controller command before lag
+let u = 0; // actuator output after lag (physical output)
+let uCmd = 0; // instantaneous controller command before lag (requested)
 let t = 0; // time
+// Flywheel state (angular speed)
+let omega = 0;
+// Integral of error for PI control
+let ei = 0;
 
 // Hidden plant parameters
 let mass = 1.0;      // m
@@ -63,21 +78,49 @@ const spBuf: number[] = [];
 function step() {
   // P-only: u = Kp * (r - y)
   const e = p.setpoint - y;
-  uCmd = p.kp * e;
+  // PI control with improved anti-windup
+  const ki = p.ki ?? 0;
+  const kp = p.kp;
+  // Predict saturation using the command side and error direction
+  const uCmdNoI = kp * e;
+  const uCmdTentative = uCmdNoI + ki * ei;
+  const uCmdSat = Math.max(-1, Math.min(1, uCmdTentative));
+  const saturatingHigh = uCmdTentative > 1 && e > 0;
+  const saturatingLow  = uCmdTentative < -1 && e < 0;
+  if (!(saturatingHigh || saturatingLow)) {
+    ei += e * p.dt;
+    // Simple integrator clamp to prevent numeric blow-up
+    const EI_MAX = 1e3;
+    if (ei > EI_MAX) ei = EI_MAX;
+    if (ei < -EI_MAX) ei = -EI_MAX;
+  }
+  // Recompute command after possible ei update and clamp command for actuator
+  uCmd = Math.max(-1, Math.min(1, kp * e + ki * ei));
   // First-order actuator lag: du/dt = (uCmd - u)/tauLag
   const du = ((uCmd - u) / Math.max(tauLag, 1e-6)) * p.dt;
   u += du;
+  // Output clamp to simulate actuator limits (physical saturation)
+  u = Math.max(-1, Math.min(1, u));
 
   // Apply deadband so tiny control outputs produce no movement
   const uEff = Math.abs(u) < U_DEADBAND ? 0 : u;
 
-  // Inertial plant (no spring): m * dv/dt + b * v = K * u
-  // dv/dt = (K*u - b*v) / m
-  const effectiveMass = Math.max(mass, 1e-6);
-  const dv = ((K * uEff - p.friction * v) / effectiveMass) * p.dt;
-  v += dv;
-  const dy = v * p.dt;
-  y += dy;
+  if ((p.plant ?? 'sled') === 'flywheel') {
+    // Flywheel plant: J * domega/dt + b * omega + tauLoad = K * u
+    const J = Math.max(p.inertiaJ ?? 0.05, 1e-6);
+    const b = p.drag ?? 0.2;
+    const tauLoad = p.loadTorque ?? 0;
+    const domega = ((K * uEff - b * omega - tauLoad) / J) * p.dt;
+    omega += domega;
+    y = omega; // output is speed
+  } else {
+    // Inertial sled (no spring): m * dv/dt + b * v = K * u
+    const effectiveMass = Math.max(mass, 1e-6);
+    const dv = ((K * uEff - p.friction * v) / effectiveMass) * p.dt;
+    v += dv;
+    const dy = v * p.dt;
+    y += dy;
+  }
   t += p.dt;
 
   tBuf.push(t);
@@ -137,6 +180,8 @@ function resetState() {
   v = 0;
   u = 0;
   t = 0;
+  omega = 0;
+  ei = 0;
   tBuf.length = 0;
   yBuf.length = 0;
   uBuf.length = 0;
