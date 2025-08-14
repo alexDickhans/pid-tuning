@@ -1334,6 +1334,14 @@ export function Playground(): JSX.Element {
           )}
         </div>
       </div>
+      <div className="card" style={{ marginTop: 24 }}>
+        <h2 className="section-title">Conclusion</h2>
+        <div className="controls">
+          <p>
+            Thanks for reading this to the end! I hope you found it useful, if you have any feedback, please let me know (adickhans@gmail.com, or on discord at @alex_2654e) and visit my website at <a href="https://alex.dickhans.net">alex.dickhans.net</a>.
+          </p>
+        </div>
+      </div>
     </>
   );
 }
