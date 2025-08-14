@@ -12,6 +12,7 @@ type UpdateMessage = {
   running: boolean;
 };
 type RandomizeMessage = { type: 'randomize' };
+type ResetMessage = { type: 'reset' };
 
 type SimParams = {
   dt: number;
@@ -40,12 +41,14 @@ let running = true;
 // Plant state and controller state
 let y = 0; // position/output
 let v = 0; // velocity
-let u = 0; // control
+let u = 0; // actuator output after lag
+let uCmd = 0; // instantaneous controller command before lag
 let t = 0; // time
 
 // Hidden plant parameters
 let mass = 1.0;      // m
 let K = 1.0;         // gain
+const tauLag = 0.08; // actuator lag (seconds), small first-order lag
 
 // Buffers for chart updates
 const maxPoints = 2000;
@@ -57,7 +60,10 @@ const spBuf: number[] = [];
 function step() {
   // P-only: u = Kp * (r - y)
   const e = p.setpoint - y;
-  u = p.kp * e;
+  uCmd = p.kp * e;
+  // First-order actuator lag: du/dt = (uCmd - u)/tauLag
+  const du = ((uCmd - u) / Math.max(tauLag, 1e-6)) * p.dt;
+  u += du;
 
   // Inertial plant (no spring): m * dv/dt + b * v = K * u
   // dv/dt = (K*u - b*v) / m
@@ -132,7 +138,7 @@ function resetState() {
 }
 
 self.addEventListener('message', (ev: MessageEvent) => {
-  const msg = ev.data as StartMessage | UpdateMessage | RandomizeMessage;
+  const msg = ev.data as StartMessage | UpdateMessage | RandomizeMessage | ResetMessage;
   if (msg.type === 'start') {
     p = msg.params;
     running = msg.running;
@@ -147,6 +153,8 @@ self.addEventListener('message', (ev: MessageEvent) => {
     // Randomize hidden plant parameters
     mass = 0.5 + Math.random() * 4.5; // 0.5 .. 5.0
     K = 0.5 + Math.random() * 2.5;    // 0.5 .. 3.0
+  } else if (msg.type === 'reset') {
+    resetState();
   }
 });
 

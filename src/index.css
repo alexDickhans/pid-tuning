@@ -1,6 +1,15 @@
-/* Minimal black on white styles */
+/* Modern light theme */
 :root {
   color-scheme: light;
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --text: #0f172a;
+  --muted: #64748b;
+  --border: #e5e7eb;
+  --primary: #2563eb;
+  --primary-700: #1d4ed8;
+  --accent: #10b981;
+  --shadow: 0 10px 15px -3px rgba(0,0,0,.1), 0 4px 6px -4px rgba(0,0,0,.08);
 }
 
 html, body, #root {
@@ -10,14 +19,15 @@ html, body, #root {
 body {
   margin: 0;
   font-family: -apple-system, system-ui, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
-  background: #fff;
-  color: #000;
+  color: var(--text);
+  background-color: var(--bg);
+  background-image: none;
 }
 
 .container {
   max-width: 1100px;
   margin: 0 auto;
-  padding: 16px;
+  padding: 24px 16px;
 }
 
 .layout {
@@ -26,24 +36,43 @@ body {
   gap: 16px;
 }
 
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}
+
 .controls label {
   display: block;
   margin: 12px 0 6px;
 }
 
+.controls {
+  text-align: left;
+}
+
+.controls .row {
+  justify-content: flex-start;
+}
+
 .row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
 }
 
 .chart {
-  border: 1px solid #000;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
   padding: 8px;
+  box-shadow: none;
 }
 
 .section-title {
   margin: 0 0 8px 0;
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 .stack {
@@ -59,13 +88,33 @@ input[type="range"] {
   width: 100%;
 }
 
+input, select {
+  color: var(--text);
+}
+
+input[type="number"] {
+  width: 110px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+input[type="range"] {
+  accent-color: var(--primary);
+}
+
 .header {
-  position: sticky;
-  top: 0;
+  position: static;
   background: #fff;
-  border-bottom: 1px solid #000;
-  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  padding: 10px 16px;
   margin-bottom: 16px;
+}
+
+.header h1 {
+  font-weight: 800;
+  letter-spacing: -0.02em;
 }
 
 .modal-backdrop {
@@ -89,19 +138,21 @@ input[type="range"] {
 }
 
 .position-bar-outer {
-  width: 100vw;
+  width: 100%;
   position: relative;
-  left: 50%;
-  transform: translateX(-50%);
+  padding: 12px 0;
 }
 
 .position-bar {
   width: 100%;
-  height: 28px;
-  border: 1px solid #000;
+  height: 32px;
+  border: 1px solid var(--border);
   position: relative;
   cursor: pointer;
-  background: linear-gradient(90deg, #fff, #fff);
+  border-radius: 12px;
+  background:
+    linear-gradient(90deg, rgba(37,99,235,.08), rgba(16,185,129,.08));
+  box-shadow: var(--shadow);
 }
 
 .bar-markers {
@@ -119,19 +170,95 @@ input[type="range"] {
 .marker.setpoint::after {
   content: '';
   position: absolute;
-  top: -2px;
-  bottom: -2px;
-  width: 2px;
-  background: #000;
+  top: -3px;
+  bottom: -3px;
+  width: 3px;
+  background: var(--text);
 }
 
 .marker.position::after {
   content: '';
   position: absolute;
-  top: 4px;
-  bottom: 4px;
-  width: 2px;
-  background: green;
+  top: 5px;
+  bottom: 5px;
+  width: 4px;
+  background: var(--primary);
+  box-shadow: 0 0 0 3px rgba(37,99,235,.12);
+}
+
+/* Cards */
+.card {
+  background: var(--surface);
+  border: none;
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: none;
+}
+
+/* Buttons */
+button {
+  appearance: none;
+  border: none;
+  background: var(--primary);
+  color: #fff;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  box-shadow: 0 2px 0 0 rgba(0,0,0,.1);
+  transition: transform .02s ease, box-shadow .2s ease, background .2s ease;
+}
+
+button:hover {
+  background: var(--primary-700);
+}
+
+button:active {
+  transform: translateY(1px);
+  box-shadow: 0 1px 0 0 rgba(0,0,0,.15);
+}
+
+/* Badges */
+.badges {
+  display: flex;
+  gap: 8px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #f8fafc;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.badge .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--primary);
+}
+
+/* Details/summary */
+details > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: none;
+  display: inline-block;
+  font-weight: 600;
+}
+
+details[open] > summary {
+  border-bottom-left-radius: 12px;
+  border-bottom-right-radius: 12px;
 }
 
 
